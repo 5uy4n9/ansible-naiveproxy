@@ -1,0 +1,15 @@
+{
+  order forward_proxy before file_server
+}
+:443, {{ domain_name }} {
+  tls {{ email_address }}
+  forward_proxy {
+    basic_auth {{ username }} {{ password }}
+    hide_ip
+    hide_via
+    probe_resistance
+  }
+  file_server {
+    root /var/www/html
+  }
+}

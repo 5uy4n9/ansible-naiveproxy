@@ -1,0 +1,92 @@
+- name: Deploy Naiveproxy
+  hosts: localhost
+  become: true
+
+  tasks:
+    - name: Create user for caddy server
+      ansible.builtin.user:
+        name: caddy
+        shell: /sbin/nologin
+        system: true
+        state: present
+
+    - name: Create temporary dir for caddy-forwardproxy-naive
+      ansible.builtin.tempfile:
+        state: directory
+      register: tmp_dir
+
+    - name: Download custom caddy-forwardproxy-naive
+      ansible.builtin.get_url:
+        url: https://github.com/klzgrad/forwardproxy/releases/download/v2.6.4-caddy2-naive/caddy-forwardproxy-naive.tar.xz
+        dest: "{{ tmp_dir.path }}/caddy-forwardproxy-naive.tar.xz"
+        owner: caddy
+        group: caddy
+        mode: "0755"
+
+    - name: Unachive it
+      ansible.builtin.unarchive:
+        src: "{{ tmp_dir.path }}/caddy-forwardproxy-naive.tar.xz"
+        dest: "{{ tmp_dir.path }}"
+        remote_src: true
+
+    - name: Copy caddy to path
+      ansible.builtin.copy:
+        src: "{{ tmp_dir.path }}/caddy-forwardproxy-naive/caddy"
+        dest: /usr/bin/caddy
+        remote_src: true
+        force: true
+        owner: caddy
+        group: caddy
+        mode: "0755"
+
+    - name: Remove temporary dir for caddy-forwardproxy-naive
+      ansible.builtin.file:
+        path: "{{ tmp_dir.path }}"
+        state: absent
+
+    - name: Create caddy config directory
+      ansible.builtin.file:
+        path: /etc/caddy
+        state: directory
+        owner: caddy
+        group: caddy
+        mode: "0755"
+
+    - name: Create caddy config file
+      ansible.builtin.template:
+        src: Caddyfile.j2
+        dest: /etc/caddy/Caddyfile
+        validate: /usr/local/bin/caddy validate --config %s
+        force: true
+        owner: caddy
+        group: caddy
+        mode: "0755"
+
+    - name: Create systemd service
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/caddyserver/dist/master/init/caddy.service
+        dest: /etc/systemd/system/caddy.service
+        force: true
+        owner: caddy
+        group: caddy
+        mode: "0755"
+
+    - name: Copy naive kernel performance tuning config file
+      ansible.builtin.copy:
+        src: naive.conf
+        dest: /etc/sysctl.d/naive.conf
+        force: true
+        owner: caddy
+        group: caddy
+        mode: "0755"
+
+    - name: Load naive kernel performance tuning config file
+      ansible.builtin.command: sysctl -p /etc/sysctl.d/naive.conf
+      changed_when: false
+
+    - name: Start/Restart systemd service
+      ansible.builtin.systemd:
+        name: caddy.service
+        state: restarted
+        enabled: true
+        daemon_reload: true
